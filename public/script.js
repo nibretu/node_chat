@@ -26,7 +26,7 @@ if (!username) {
 }
 usernameDisplay.textContent = `Logged in as: ${username}`;
 
-// 2. Fetch and Render Rooms
+// 2. Fetch and Render Rooms (NOW WITH RENAME & DELETE BUTTONS)
 async function fetchRooms() {
   try {
     const res = await fetch('/api/rooms');
@@ -37,9 +37,42 @@ async function fetchRooms() {
     rooms.forEach((room) => {
       const li = document.createElement('li');
 
-      li.textContent = room.name;
-      li.dataset.id = room._id;
-      li.onclick = () => joinRoom(room._id, room.name, li);
+      // Create the room name span
+      const nameSpan = document.createElement('span');
+
+      nameSpan.textContent = room.name;
+      nameSpan.onclick = () => joinRoom(room._id, room.name, li);
+      li.appendChild(nameSpan);
+
+      // Create the actions container
+      const actionsDiv = document.createElement('div');
+
+      actionsDiv.className = 'room-item-actions';
+
+      // Rename Button
+      const renameBtn = document.createElement('button');
+
+      renameBtn.textContent = '✏️';
+
+      renameBtn.onclick = (e) => {
+        e.stopPropagation(); // Prevent joining the room when clicking rename
+        renameRoom(room._id, room.name);
+      };
+
+      // Delete Button
+      const deleteBtn = document.createElement('button');
+
+      deleteBtn.textContent = '🗑️';
+
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation(); // Prevent joining the room when clicking delete
+        deleteRoom(room._id);
+      };
+
+      actionsDiv.appendChild(renameBtn);
+      actionsDiv.appendChild(deleteBtn);
+      li.appendChild(actionsDiv);
+
       roomList.appendChild(li);
     });
   } catch (err) {
@@ -88,7 +121,7 @@ createRoomBtn.onclick = async () => {
     const res = await fetch('/api/rooms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: roomName }), // <-- FIXED HERE
+      body: JSON.stringify({ name: roomName }),
     });
     const data = await res.json();
 
@@ -103,7 +136,54 @@ createRoomBtn.onclick = async () => {
   }
 };
 
-// 5. Send a Message
+// 5. Rename a Room (NEW - Uses Socket.IO for real-time update)
+function renameRoom(roomId, currentName) {
+  const newName = prompt('Enter new room name:', currentName);
+
+  if (!newName || newName === currentName) {
+    return;
+  }
+
+  // Emit the socket event instead of using fetch
+  socket.emit('renameRoom', { roomId, newName });
+}
+
+// 6. Delete a Room (NEW - Uses REST API)
+async function deleteRoom(roomId) {
+  if (
+    !confirm(
+      'Are you sure you want to delete this room? All messages will be lost.',
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/rooms/${roomId}`, {
+      method: 'DELETE',
+    });
+
+    if (res.ok) {
+      // If we deleted the room we are currently in, reset the UI
+      if (currentRoomId === roomId) {
+        currentRoomId = null;
+        currentRoomName.textContent = 'Select a Room';
+        messagesContainer.innerHTML = '';
+        messageInput.disabled = true;
+        sendBtn.disabled = true;
+      }
+      fetchRooms(); // Refresh list
+    } else {
+      const data = await res.json();
+
+      alert(data.error || 'Failed to delete room');
+    }
+  } catch (err) {
+    console.error('Error deleting room:', err);
+  }
+}
+
+// 7. Send a Message
 sendBtn.onclick = () => {
   const text = messageInput.value.trim();
 
@@ -121,7 +201,7 @@ messageInput.addEventListener('keypress', (e) => {
   }
 });
 
-// 6. Handle Incoming Socket Events
+// 8. Handle Incoming Socket Events
 socket.on('messageHistory', (messages) => {
   messagesContainer.innerHTML = '';
   messages.forEach(addMessageToUI);
@@ -133,6 +213,16 @@ socket.on('message', (message) => {
 
 socket.on('roomCreated', () => {
   fetchRooms(); // Refresh the room list when someone else creates a room
+});
+
+// NEW: Listen for real-time rename broadcast from the server
+socket.on('roomRenamed', (updatedRoom) => {
+  fetchRooms(); // Refresh the sidebar for ALL connected users
+
+  // If the current user is inside the room that got renamed
+  if (currentRoomId === updatedRoom._id) {
+    currentRoomName.textContent = updatedRoom.name;
+  }
 });
 
 // Helper function to render a message

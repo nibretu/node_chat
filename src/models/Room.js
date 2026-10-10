@@ -5,18 +5,14 @@ const roomSchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
-      unique: true, // Prevents duplicate room names
+      unique: true,
       trim: true,
     },
-    // Optional: Track members for features like "user is typing"
-    members: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User', // If you have a User model from your auth app
-      },
-    ],
+    // The 'members' field has been removed
   },
-  { timestamps: true },
-); // Adds createdAt and updatedAt
+  {
+    timestamps: true,
+  },
+);
 
 module.exports = mongoose.model('Room', roomSchema);

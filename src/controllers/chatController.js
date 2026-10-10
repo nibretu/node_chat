@@ -54,6 +54,29 @@ module.exports = (io) => {
       }
     });
 
+    // --- RENAME A ROOM ---
+    socket.on('renameRoom', async ({ roomId, newName }) => {
+      try {
+        const updatedRoom = await Room.findByIdAndUpdate(
+          roomId,
+          { name: newName },
+          { new: true, runValidators: true },
+        );
+
+        if (updatedRoom) {
+          // Broadcast to ALL clients so their sidebars update instantly
+          io.emit('roomRenamed', updatedRoom);
+        }
+      } catch (err) {
+        process.stderr.write(`Rename room error: ${err.message}\n`);
+
+        socket.emit(
+          'error',
+          'Failed to rename room. Name might already be in use.',
+        );
+      }
+    });
+
     // --- LEAVE A ROOM ---
     socket.on('leaveRoom', ({ roomId, username }) => {
       socket.leave(roomId);
